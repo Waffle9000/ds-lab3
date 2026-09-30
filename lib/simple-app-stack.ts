@@ -21,7 +21,6 @@ export class SimpleAppStack extends cdk.Stack {
         allowedOrigins: ["*"],
       },
     });
-    cd
     new cdk.CfnOutput(this, "Simple Function Url", { value: simpleFnURL.url });
   }
 }
