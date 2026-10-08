@@ -4,7 +4,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as custom from "aws-cdk-lib/custom-resources";
 import { generateBatch } from "../shared/util";
-import {movies} from "../seed/movies";
+import { movies } from "../seed/movies";
 
 import { Construct } from 'constructs';
 
@@ -19,8 +19,9 @@ export class SimpleAppStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(10),
       memorySize: 128,
     });
+
     const simpleFnURL = simpleFn.addFunctionUrl({
-      authType: lambda.FunctionUrlAuthType.AWS_IAM,   // CHANGE
+      authType: lambda.FunctionUrlAuthType.AWS_IAM,
       cors: {
         allowedOrigins: ["*"],
       },
@@ -33,7 +34,7 @@ export class SimpleAppStack extends cdk.Stack {
       tableName: "Movies",
     });
 
-     new custom.AwsCustomResource(this, "moviesddbInitData", {
+    new custom.AwsCustomResource(this, "moviesddbInitData", {
       onCreate: {
         service: "DynamoDB",
         action: "batchWriteItem",
@@ -42,13 +43,35 @@ export class SimpleAppStack extends cdk.Stack {
             [moviesTable.tableName]: generateBatch(movies),
           },
         },
-        physicalResourceId: custom.PhysicalResourceId.of("moviesddbInitData"), //.of(Date.now().toString()),
+        physicalResourceId: custom.PhysicalResourceId.of("moviesddbInitData"),
       },
       policy: custom.AwsCustomResourcePolicy.fromSdkCalls({
         resources: [moviesTable.tableArn],
       }),
     });
 
+    const getMovieByIdFn = new lambdanode.NodejsFunction(this, "GetMovieByIdFn", {
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_22_X,
+      entry: `${__dirname}/../lambdas/getMovieById.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      environment: {
+        TABLE_NAME: moviesTable.tableName,
+        REGION: cdk.Aws.REGION,
+      },
+    });
+
+    const getMovieByIdURL = getMovieByIdFn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      cors: {
+        allowedOrigins: ["*"],
+      },
+    });
+
+    moviesTable.grantReadData(getMovieByIdFn);
+
     new cdk.CfnOutput(this, "Simple Function Url", { value: simpleFnURL.url });
+    new cdk.CfnOutput(this, "Get Movie Function Url", { value: getMovieByIdURL.url });
   }
 }
